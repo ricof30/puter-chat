@@ -50,7 +50,6 @@
 
     /* Main chat area */
     .main{max-width:860px; margin:0 auto; padding:8px 16px 24px}
-    /* ✅ FLEX column so items align within the centered column */
     .messages{display:flex; flex-direction:column; gap:16px; padding:24px 0 8px}
 
     /* Bubbles (AI left, user right) locked inside column width */
@@ -208,14 +207,28 @@
     const CONVO_KEY=id=>PREFIX+'convo-'+id;
     const THEME_KEY=PREFIX+'theme';
 
+    // ===== Memory settings =====
+    const CTX_TURNS = 12;          // recent turns from this chat
+    const CTX_CHAR_BUDGET = 8000;  // hard cap for prompt size
+
     let sessions=loadSessions();
     let currentId=sessions.currentId||createSession('New chat');
     let convo=loadConvo(currentId);
     let puterReady=false, editingIndex=null;
 
-    function loadSessions(){ try{ const d=JSON.parse(localStorage.getItem(SESS_KEY)||'{}'); return d.list?d:{currentId:null,list:[]}; }catch{return {currentId:null,list:[]};} }
+    function loadSessions(){
+      try{
+        const d=JSON.parse(localStorage.getItem(SESS_KEY)||'{}');
+        return d.list ? d : {currentId:null,list:[]};
+      }catch{return {currentId:null,list:[]};}
+    }
     function saveSessions(){ localStorage.setItem(SESS_KEY, JSON.stringify(sessions)); }
-    function createSession(title){ const id=Date.now().toString(36); const item={id,title:title||'New chat',created:new Date().toISOString()}; sessions.list.unshift(item); sessions.currentId=id; saveSessions(); localStorage.setItem(CONVO_KEY(id),'[]'); return id; }
+    function createSession(title){
+      const id=Date.now().toString(36);
+      const item={id,title:title||'New chat',created:new Date().toISOString()};
+      sessions.list.unshift(item); sessions.currentId=id; saveSessions();
+      localStorage.setItem(CONVO_KEY(id),'[]'); return id;
+    }
     function loadConvo(id){ try{ return JSON.parse(localStorage.getItem(CONVO_KEY(id))||'[]'); }catch{ return []; } }
     function saveConvo(){ localStorage.setItem(CONVO_KEY(currentId), JSON.stringify(convo.slice(-300))); }
 
@@ -231,18 +244,33 @@
     function toast(msg){ ui.toast.textContent=msg; ui.toast.className='toast show'; setTimeout(()=>ui.toast.classList.remove('show'), 1400); }
     function setContent(node,text){ node.innerHTML=''; String(text||'').split('\n').forEach((ln,i)=>{ if(i) node.appendChild(document.createElement('br')); node.appendChild(document.createTextNode(ln)); }); }
     function makeIconBtn(label,act,idx){ const b=document.createElement('button'); b.className='icon-btn'; b.dataset.act=act; b.dataset.index=idx; b.textContent=label; return b; }
-    function makeMsgEl(m,i){ const wrap=document.createElement('div'); wrap.className=`msg ${m.role}`; wrap.dataset.index=i;
+    function makeMsgEl(m,i){
+      const wrap=document.createElement('div'); wrap.className=`msg ${m.role}`; wrap.dataset.index=i;
       const avatar=document.createElement('div'); avatar.className='avatar'; avatar.textContent=m.role==='assistant'?'🤖':'🧑‍💻';
       const content=document.createElement('div'); content.className='content'; setContent(content,m.content||'');
       const row=document.createElement('div'); row.className='toolbar-row'; const tb=document.createElement('div'); tb.className='toolbar';
       if(m.role==='user') tb.appendChild(makeIconBtn('✏️ Edit','edit',i)); tb.appendChild(makeIconBtn('📋 Copy','copy',i)); row.appendChild(tb);
       if(m.role==='assistant'){ wrap.appendChild(avatar); wrap.appendChild(content); wrap.appendChild(row); } else { wrap.appendChild(content); wrap.appendChild(avatar); wrap.appendChild(row); }
-      return wrap; }
+      return wrap;
+    }
 
-    function renderAll(){ ui.messages.innerHTML=''; convo.forEach((m,i)=>ui.messages.appendChild(makeMsgEl(m,i))); ui.count.textContent=`${convo.length} message${convo.length===1?'':'s'}`; ui.messages.scrollTop=ui.messages.scrollHeight; }
+    function renderAll(){
+      ui.messages.innerHTML=''; convo.forEach((m,i)=>ui.messages.appendChild(makeMsgEl(m,i)));
+      ui.count.textContent=`${convo.length} message${convo.length===1?'':'s'}`; ui.messages.scrollTop=ui.messages.scrollHeight;
+    }
 
-    function appendMsg(role,content){ const i=convo.length; convo.push({role,content}); saveConvo(); const el=makeMsgEl(convo[i],i); ui.messages.appendChild(el); ui.count.textContent=`${convo.length} message${convo.length===1?'':'s'}`; ui.messages.scrollTop=ui.messages.scrollHeight; return {index:i,el}; }
-    function updateMsg(i,content){ if(!convo[i]) return; convo[i].content=content; saveConvo(); const n=ui.messages.querySelector(`.msg[data-index="${i}"] .content`); if(n) setContent(n,content); }
+    function appendMsg(role,content){
+      const i=convo.length; convo.push({role,content}); saveConvo();
+      const el=makeMsgEl(convo[i],i); ui.messages.appendChild(el);
+      ui.count.textContent=`${convo.length} message${convo.length===1?'':'s'}`;
+      ui.messages.scrollTop=ui.messages.scrollHeight; return {index:i,el};
+    }
+    function updateMsg(i,content){
+      if(!convo[i]) return;
+      convo[i].content=content; saveConvo();
+      const n=ui.messages.querySelector(`.msg[data-index="${i}"] .content`);
+      if(n) setContent(n,content);
+    }
 
     // toolbar
     ui.messages.addEventListener('click', e=>{
@@ -262,13 +290,25 @@
       const cancelBtn=document.createElement('button'); cancelBtn.className='btn'; cancelBtn.textContent='✖ Cancel';
       actions.appendChild(saveBtn); actions.appendChild(cancelBtn); box.appendChild(ta); box.appendChild(actions); msgEl.appendChild(box); ta.focus();
       const finish=()=>{ editingIndex=null; renderAll(); };
-      saveBtn.addEventListener('click', ()=>{ const val=ta.value||''; convo[i].content=val; if(i===0){ const s=sessions.list.find(x=>x.id===currentId); if(s){ s.title = val.slice(0,60)||'New chat'; saveSessions(); setHistoryOptions(); } } convo=convo.slice(0,i+1); saveConvo(); finish(); runAssistant(val); });
+      saveBtn.addEventListener('click', ()=>{
+        const val=ta.value||'';
+        convo[i].content=val;
+        if(i===0){ const s=sessions.list.find(x=>x.id===currentId); if(s){ s.title = val.slice(0,60)||'New chat'; saveSessions(); setHistoryOptions(); } }
+        convo=convo.slice(0,i+1); saveConvo(); finish(); runAssistant(val);
+      });
       cancelBtn.addEventListener('click', finish);
     }
 
     // toggles & new chat
-    $('#advToggle').addEventListener('click', ()=>{ ui.adv.classList.toggle('open'); ui.adv.setAttribute('aria-hidden', String(!ui.adv.classList.contains('open'))); if(ui.adv.classList.contains('open')) ui.adv.scrollIntoView({behavior:'smooth', block:'start'}); });
-    ui.newChat.addEventListener('click', ()=>{ currentId=createSession('New chat'); sessions.currentId=currentId; saveSessions(); setHistoryOptions(); convo=[]; saveConvo(); renderAll(); ui.prompt.focus(); });
+    $('#advToggle').addEventListener('click', ()=>{
+      ui.adv.classList.toggle('open');
+      ui.adv.setAttribute('aria-hidden', String(!ui.adv.classList.contains('open')));
+      if(ui.adv.classList.contains('open')) ui.adv.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+    ui.newChat.addEventListener('click', ()=>{
+      currentId=createSession('New chat'); sessions.currentId=currentId; saveSessions(); setHistoryOptions();
+      convo=[]; saveConvo(); renderAll(); ui.prompt.focus();
+    });
 
     // send UX
     ui.prompt.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
@@ -276,7 +316,12 @@
 
     async function waitForPuter(timeout=12000){
       if(window.puter?.ai?.chat) return true;
-      const start=Date.now(); return await new Promise(res=>{ const iv=setInterval(()=>{ if(window.puter?.ai?.chat){clearInterval(iv); res(true);} else if(Date.now()-start>timeout){clearInterval(iv); res(false);} },120); });
+      const start=Date.now(); return await new Promise(res=>{
+        const iv=setInterval(()=>{
+          if(window.puter?.ai?.chat){clearInterval(iv); res(true);}
+          else if(Date.now()-start>timeout){clearInterval(iv); res(false);}
+        },120);
+      });
     }
 
     (async function init(){
@@ -287,6 +332,36 @@
       renderAll();
     })();
 
+    // ===== Conversation memory helpers =====
+    function roleLabel(r){ return r === 'user' ? 'User' : 'Assistant'; }
+    function transcriptFrom(messages){
+      return messages.map(m => `${roleLabel(m.role)}: ${m.content}`).join('\n');
+    }
+    function previousSessionContext(maxChars = 3000){
+      const prev = sessions.list.find(s => s.id !== currentId);
+      if (!prev) return '';
+      try{
+        const prevConvo = JSON.parse(localStorage.getItem(CONVO_KEY(prev.id)) || '[]');
+        if (!Array.isArray(prevConvo) || !prevConvo.length) return '';
+        let block = transcriptFrom(prevConvo);
+        if (block.length > maxChars) block = block.slice(-maxChars);
+        const title = (prev.title || 'previous chat').replace(/[<>&"]/g,'');
+        return `\n\n[Context from previous session "${title}"]\n${block}`;
+      }catch{ return ''; }
+    }
+    function buildPromptWithMemory(latestUserText){
+      const system = (ui.system?.value || '').trim();
+      const history = convo.slice(Math.max(0, convo.length - CTX_TURNS)); // includes latest user turn
+      let prompt = transcriptFrom(history) + '\nAssistant:';
+
+      if (/\b(previous|last|earlier)\s+(chat|conversation)\b/i.test(latestUserText || '')) {
+        prompt += previousSessionContext(3000);
+      }
+      if (system) prompt = `System: ${system}\n\n` + prompt;
+      if (prompt.length > CTX_CHAR_BUDGET) prompt = prompt.slice(prompt.length - CTX_CHAR_BUDGET);
+      return prompt;
+    }
+
     async function send(){
       const text=ui.prompt.value.trim();
       if(!text){ toast('Type a message'); return; }
@@ -294,15 +369,21 @@
       if(!puterReady){ toast('Puter.js not ready'); return; }
 
       appendMsg('user', text);
-      if(convo.length===1){ const s=sessions.list.find(x=>x.id===currentId); if(s){ s.title=text.slice(0,60); saveSessions(); setHistoryOptions(); } }
+      if(convo.length===1){
+        const s=sessions.list.find(x=>x.id===currentId);
+        if(s){ s.title=text.slice(0,60); saveSessions(); setHistoryOptions(); }
+      }
       ui.prompt.value='';
       await runAssistant(text);
     }
 
     async function runAssistant(text){
-      const model=ui.model.value, doStream=ui.stream.value==='on';
-      const system=($('#system')?.value||'').trim(), imageUrl=($('#imageUrl')?.value||'').trim();
-      const effective = system ? `[System instruction]: ${system}\n\n${text}` : text;
+      const model = ui.model.value;
+      const doStream = ui.stream.value==='on';
+      const imageUrl = ($('#imageUrl')?.value||'').trim();
+
+      // Build prompt with memory + optional previous-session context
+      const effective = buildPromptWithMemory(text);
 
       const { index:aIndex } = appendMsg('assistant','');
       const aEl = ui.messages.querySelector(`.msg[data-index="${aIndex}"] .content`);
@@ -316,12 +397,17 @@
                                : await puter.ai.chat(effective, { model, stream:true });
           let acc='';
           if(res && typeof res[Symbol.asyncIterator]==='function'){
-            for await (const part of res){ const chunk=typeof part==='string'?part:(part?.text||''); if(!chunk) continue; acc+=chunk; updateMsg(aIndex, acc); ui.messages.scrollTop=ui.messages.scrollHeight; }
+            for await (const part of res){
+              const chunk=typeof part==='string'?part:(part?.text||'');
+              if(!chunk) continue;
+              acc+=chunk; updateMsg(aIndex, acc); ui.messages.scrollTop=ui.messages.scrollHeight;
+            }
           }else{
             const out = typeof res==='string'? res : (res?.text || String(res||'')); updateMsg(aIndex, out);
           }
         }else{
-          const out = imageUrl ? await puter.ai.chat(effective, imageUrl, { model }) : await puter.ai.chat(effective, { model });
+          const out = imageUrl ? await puter.ai.chat(effective, imageUrl, { model })
+                               : await puter.ai.chat(effective, { model });
           const textOut = typeof out==='string'? out : (out?.text || String(out||'')); updateMsg(aIndex, textOut);
         }
       }catch(err){
