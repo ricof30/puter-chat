@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="system">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Puter.js Chat Studio — ChatGPT-style</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://js.puter.com/v2/"></script>
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb;
+      --accent:#22c55e; --accent-2:#14b8a6; --border:#1f2937;
+      --radius:14px; --shadow:0 8px 24px rgba(0,0,0,.45);
+      --bubble-user:#0c142a; --bubble-ai:#0e162f;
+    }
+    [data-theme="light"]{
+      --bg:#f3f4f6; --panel:#ffffff; --muted:#6b7280; --text:#0b1224;
+      --accent:#16a34a; --accent-2:#06b6d4; --border:#e5e7eb;
+      --bubble-user:#ffffff; --bubble-ai:#f8fafc; --shadow:0 8px 24px rgba(2,6,23,.08);
+    }
+    @media (prefers-color-scheme: light){
+      [data-theme="system"]{
+        --bg:#f3f4f6; --panel:#ffffff; --muted:#6b7280; --text:#0b1224;
+        --accent:#16a34a; --accent-2:#06b6d4; --border:#e5e7eb;
+        --bubble-user:#ffffff; --bubble-ai:#f8fafc; --shadow:0 8px 24px rgba(2,6,23,.08);
+      }
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; color:var(--text);
+      background:linear-gradient(180deg, var(--panel), var(--bg));
+      font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    }
+    .app{display:grid; grid-template-rows:auto 1fr auto; height:100%}
+
+    /* Top bar */
+    .topbar{position:sticky; top:0; z-index:5; backdrop-filter:saturate(120%) blur(8px);
+      background:color-mix(in oklab, var(--panel) 70%, transparent); border-bottom:1px solid var(--border)}
+    .topbar .inner{max-width:960px; margin:0 auto; padding:12px 16px; display:flex; align-items:center; gap:10px}
+    .brand{display:flex; align-items:center; gap:10px}
+    .brand .logo{width:28px; height:28px; border-radius:8px; display:grid; place-items:center; background:linear-gradient(135deg,var(--accent),var(--accent-2)); box-shadow:var(--shadow)}
+    .brand h1{font-size:16px; margin:0}
+    .grow{flex:1}
+    select,.btn{background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:8px 10px}
+    .btn{cursor:pointer} .btn:disabled{opacity:.5; cursor:not-allowed}
+
+    /* Main chat area */
+    .main{max-width:860px; margin:0 auto; padding:8px 16px 24px}
+    /* ✅ FLEX column so items align within the centered column */
+    .messages{display:flex; flex-direction:column; gap:16px; padding:24px 0 8px}
+
+    /* Bubbles (AI left, user right) locked inside column width */
+    .msg{
+      display:grid; gap:12px; padding:16px; border:1px solid var(--border);
+      border-radius:var(--radius); background:var(--bubble-user);
+      max-width:min(760px, 100%); width:fit-content;
+    }
+    .msg.assistant{align-self:flex-start; grid-template-columns:40px auto; background:var(--bubble-ai)}
+    .msg.user{align-self:flex-end; grid-template-columns:auto 40px}
+    .avatar{width:40px; height:40px; border-radius:50%; display:grid; place-items:center; background:var(--panel); border:1px solid var(--border)}
+    .content{line-height:1.7; overflow-wrap:anywhere}
+
+    /* Hover toolbar */
+    .toolbar{display:flex; gap:8px; opacity:0; transform:translateY(4px); transition:all .15s ease}
+    .msg:hover .toolbar{opacity:1; transform:none}
+    .icon-btn{display:inline-flex; gap:6px; align-items:center; border:1px solid var(--border); background:var(--panel); color:var(--muted); border-radius:8px; padding:6px 8px; cursor:pointer; font-size:12px}
+    .icon-btn:hover{color:var(--text)}
+    .toolbar-row{display:flex}
+    .msg.assistant .toolbar-row{grid-column:2; justify-content:flex-start}
+    .msg.user .toolbar-row{grid-column:1; justify-content:flex-end}
+
+    .muted{color:var(--muted); font-size:12px}
+
+    /* Composer */
+    .composer{position:sticky; bottom:0; padding:10px 16px 24px;
+      background:linear-gradient(180deg, transparent, color-mix(in oklab, var(--bg) 85%, transparent))}
+    .composer .panel{max-width:860px; margin:0 auto; border:1px solid var(--border); border-radius:var(--radius); background:var(--panel); box-shadow:var(--shadow)}
+    .composer textarea{width:100%; min-height:60px; max-height:220px; resize:vertical; background:transparent; border:none; outline:none; color:var(--text); padding:14px 16px; font:500 15px/1.6 Inter}
+    .composer .row{display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-top:1px solid var(--border)}
+
+    /* Advanced options */
+    .adv{max-width:860px; margin:0 auto 10px; display:none}
+    .adv.open{display:block}
+    .adv .box{border:1px dashed var(--border); border-radius:12px; padding:10px; background:var(--panel)}
+    .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+
+    /* Inline editor */
+    .edit-box{border:1px solid var(--border); border-radius:10px; padding:8px; background:var(--panel)}
+    .edit-actions{display:flex; gap:8px; margin-top:8px}
+
+    /* Typing dots */
+    .typing{display:inline-flex; align-items:center; gap:6px; color:var(--muted)}
+    .dot{width:6px; height:6px; border-radius:50%; background:var(--muted); opacity:.6; animation:blink 1.2s infinite ease-in-out}
+    .dot:nth-child(2){animation-delay:.15s}
+    .dot:nth-child(3){animation-delay:.3s}
+    @keyframes blink{0%,80%,100%{opacity:.2; transform:translateY(0)}40%{opacity:1; transform:translateY(-2px)}}
+
+    .toast{position:fixed; right:16px; bottom:16px; padding:10px 12px; border-radius:10px; background:var(--panel); border:1px solid var(--border); color:var(--text); opacity:0; transform:translateY(8px); transition:all .2s ease; z-index:50}
+
+    /* 📱 Responsive tweaks */
+    @media (max-width:640px){
+      .topbar .inner{gap:8px}
+      .msg{padding:12px}
+      .msg.assistant{grid-template-columns:32px auto}
+      .msg.user{grid-template-columns:auto 32px}
+      .avatar{width:32px; height:32px; font-size:14px}
+      .grid2{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="inner">
+        <div class="brand">
+          <div class="logo" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2c2.9 0 5.5 1.2 7.4 3.1l-2.1 2.1A8 8 0 1 0 20 12h3a11 11 0 1 1-11-10Z" fill="white"/><path d="M14.5 7h2v10h-2V7Zm-7 3h2v7h-2v-7Z" fill="white" opacity=".9"/></svg>
+          </div>
+          <h1>Puter Chat</h1>
+        </div>
+
+        <div class="grow"></div>
+
+        <!-- History + Theme -->
+        <select id="history" title="History (switch chat)"></select>
+        <select id="theme" title="Theme">
+          <option value="system" selected>Theme: System</option>
+          <option value="dark">Theme: Dark</option>
+          <option value="light">Theme: Light</option>
+        </select>
+
+        <select id="model" title="Model">
+          <option value="gpt-5-nano" selected>gpt-5-nano</option>
+          <option value="gpt-5-mini">gpt-5-mini</option>
+          <option value="gpt-5">gpt-5</option>
+          <option value="gpt-5-chat-latest">gpt-5-chat-latest</option>
+          <option value="gpt-4.1">gpt-4.1</option>
+          <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+          <option value="gpt-4.1-nano">gpt-4.1-nano</option>
+          <option value="gpt-4.5-preview">gpt-4.5-preview</option>
+          <option value="gpt-4o">gpt-4o</option>
+          <option value="gpt-4o-mini">gpt-4o-mini</option>
+          <option value="o1">o1</option>
+          <option value="o1-mini">o1-mini</option>
+          <option value="o1-pro">o1-pro</option>
+          <option value="o3">o3</option>
+          <option value="o3-mini">o3-mini</option>
+          <option value="o4-mini">o4-mini</option>
+        </select>
+
+        <select id="stream" title="Streaming">
+          <option value="on" selected>Streaming: On</option>
+          <option value="off">Streaming: Off</option>
+        </select>
+        <button id="advToggle" class="btn" title="Advanced settings">⚙️</button>
+        <button id="newChat" class="btn" title="New chat">🆕</button>
+      </div>
+    </div>
+
+    <!-- Advanced options -->
+    <div id="adv" class="adv" aria-hidden="true">
+      <div class="box">
+        <div class="grid2">
+          <div><div class="muted">System prompt (optional)</div><input id="system" type="text" placeholder="You are a concise, friendly assistant." /></div>
+          <div><div class="muted">Image URL (optional for vision)</div><input id="imageUrl" type="url" placeholder="https://…" /></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <main class="main">
+      <div id="messages" class="messages" aria-live="polite"></div>
+      <div class="muted" id="count">0 messages</div>
+    </main>
+
+    <!-- Composer -->
+    <div class="composer">
+      <div class="panel">
+        <textarea id="prompt" placeholder="Message Puter… (Shift+Enter = newline)"></textarea>
+        <div class="row">
+          <div class="muted" id="status">Puter.js • No API keys</div>
+          <button id="send" class="btn" style="border-color:var(--border); background:linear-gradient(135deg, var(--accent), var(--accent-2)); color:#0b1224">➤ Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="assertive"></div>
+
+  <script>
+    const $ = (s, el=document) => el.querySelector(s);
+
+    const ui = {
+      messages: $('#messages'), count: $('#count'), prompt: $('#prompt'), send: $('#send'),
+      model: $('#model'), stream: $('#stream'), advToggle: $('#advToggle'), adv: $('#adv'),
+      newChat: $('#newChat'), system: $('#system'), imageUrl: $('#imageUrl'), status: $('#status'),
+      toast: $('#toast'), theme: $('#theme'), root: document.documentElement, history: $('#history')
+    };
+
+    /* ===== sessions + storage ===== */
+    const PREFIX='puter-chat-';
+    const SESS_KEY=PREFIX+'sessions';
+    const CONVO_KEY=id=>PREFIX+'convo-'+id;
+    const THEME_KEY=PREFIX+'theme';
+
+    let sessions=loadSessions();
+    let currentId=sessions.currentId||createSession('New chat');
+    let convo=loadConvo(currentId);
+    let puterReady=false, editingIndex=null;
+
+    function loadSessions(){ try{ const d=JSON.parse(localStorage.getItem(SESS_KEY)||'{}'); return d.list?d:{currentId:null,list:[]}; }catch{return {currentId:null,list:[]};} }
+    function saveSessions(){ localStorage.setItem(SESS_KEY, JSON.stringify(sessions)); }
+    function createSession(title){ const id=Date.now().toString(36); const item={id,title:title||'New chat',created:new Date().toISOString()}; sessions.list.unshift(item); sessions.currentId=id; saveSessions(); localStorage.setItem(CONVO_KEY(id),'[]'); return id; }
+    function loadConvo(id){ try{ return JSON.parse(localStorage.getItem(CONVO_KEY(id))||'[]'); }catch{ return []; } }
+    function saveConvo(){ localStorage.setItem(CONVO_KEY(currentId), JSON.stringify(convo.slice(-300))); }
+
+    // Theme + history
+    function applyTheme(v){ ui.root.setAttribute('data-theme', v||'system'); localStorage.setItem(THEME_KEY, v||'system'); }
+    ui.theme.value = localStorage.getItem(THEME_KEY)||'system'; applyTheme(ui.theme.value);
+    ui.theme.addEventListener('change', e=>applyTheme(e.target.value));
+    function setHistoryOptions(){ ui.history.innerHTML = sessions.list.map(s=>`<option value="${s.id}" ${s.id===currentId?'selected':''}>${(s.title||'New chat').replace(/[<>&"]/g,'')}</option>`).join(''); }
+    setHistoryOptions();
+    ui.history.addEventListener('change', e=>{ currentId=e.target.value; sessions.currentId=currentId; saveSessions(); convo=loadConvo(currentId); renderAll(); });
+
+    // helpers
+    function toast(msg){ ui.toast.textContent=msg; ui.toast.className='toast show'; setTimeout(()=>ui.toast.classList.remove('show'), 1400); }
+    function setContent(node,text){ node.innerHTML=''; String(text||'').split('\n').forEach((ln,i)=>{ if(i) node.appendChild(document.createElement('br')); node.appendChild(document.createTextNode(ln)); }); }
+    function makeIconBtn(label,act,idx){ const b=document.createElement('button'); b.className='icon-btn'; b.dataset.act=act; b.dataset.index=idx; b.textContent=label; return b; }
+    function makeMsgEl(m,i){ const wrap=document.createElement('div'); wrap.className=`msg ${m.role}`; wrap.dataset.index=i;
+      const avatar=document.createElement('div'); avatar.className='avatar'; avatar.textContent=m.role==='assistant'?'🤖':'🧑‍💻';
+      const content=document.createElement('div'); content.className='content'; setContent(content,m.content||'');
+      const row=document.createElement('div'); row.className='toolbar-row'; const tb=document.createElement('div'); tb.className='toolbar';
+      if(m.role==='user') tb.appendChild(makeIconBtn('✏️ Edit','edit',i)); tb.appendChild(makeIconBtn('📋 Copy','copy',i)); row.appendChild(tb);
+      if(m.role==='assistant'){ wrap.appendChild(avatar); wrap.appendChild(content); wrap.appendChild(row); } else { wrap.appendChild(content); wrap.appendChild(avatar); wrap.appendChild(row); }
+      return wrap; }
+
+    function renderAll(){ ui.messages.innerHTML=''; convo.forEach((m,i)=>ui.messages.appendChild(makeMsgEl(m,i))); ui.count.textContent=`${convo.length} message${convo.length===1?'':'s'}`; ui.messages.scrollTop=ui.messages.scrollHeight; }
+
+    function appendMsg(role,content){ const i=convo.length; convo.push({role,content}); saveConvo(); const el=makeMsgEl(convo[i],i); ui.messages.appendChild(el); ui.count.textContent=`${convo.length} message${convo.length===1?'':'s'}`; ui.messages.scrollTop=ui.messages.scrollHeight; return {index:i,el}; }
+    function updateMsg(i,content){ if(!convo[i]) return; convo[i].content=content; saveConvo(); const n=ui.messages.querySelector(`.msg[data-index="${i}"] .content`); if(n) setContent(n,content); }
+
+    // toolbar
+    ui.messages.addEventListener('click', e=>{
+      const btn=e.target.closest('.icon-btn'); if(!btn) return;
+      const i=+btn.dataset.index, act=btn.dataset.act;
+      if(act==='copy'){ navigator.clipboard.writeText(convo[i]?.content||''); toast('Copied'); }
+      if(act==='edit'){ editMsg(i); }
+    });
+
+    function editMsg(i){
+      const m=convo[i]; if(!m || m.role!=='user' || editingIndex!==null) return; editingIndex=i;
+      const msgEl=ui.messages.querySelector(`.msg[data-index="${i}"] .content`); const original=m.content;
+      msgEl.innerHTML=''; const box=document.createElement('div'); box.className='edit-box';
+      const ta=document.createElement('textarea'); ta.style.cssText='width:100%; min-height:80px; resize:vertical; background:transparent; color:inherit; border:none; outline:none; font:500 15px/1.6 Inter'; ta.value=original;
+      const actions=document.createElement('div'); actions.className='edit-actions';
+      const saveBtn=document.createElement('button'); saveBtn.className='btn'; saveBtn.style.cssText='background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#0b1224'; saveBtn.textContent='💾 Save & Regenerate';
+      const cancelBtn=document.createElement('button'); cancelBtn.className='btn'; cancelBtn.textContent='✖ Cancel';
+      actions.appendChild(saveBtn); actions.appendChild(cancelBtn); box.appendChild(ta); box.appendChild(actions); msgEl.appendChild(box); ta.focus();
+      const finish=()=>{ editingIndex=null; renderAll(); };
+      saveBtn.addEventListener('click', ()=>{ const val=ta.value||''; convo[i].content=val; if(i===0){ const s=sessions.list.find(x=>x.id===currentId); if(s){ s.title = val.slice(0,60)||'New chat'; saveSessions(); setHistoryOptions(); } } convo=convo.slice(0,i+1); saveConvo(); finish(); runAssistant(val); });
+      cancelBtn.addEventListener('click', finish);
+    }
+
+    // toggles & new chat
+    $('#advToggle').addEventListener('click', ()=>{ ui.adv.classList.toggle('open'); ui.adv.setAttribute('aria-hidden', String(!ui.adv.classList.contains('open'))); if(ui.adv.classList.contains('open')) ui.adv.scrollIntoView({behavior:'smooth', block:'start'}); });
+    ui.newChat.addEventListener('click', ()=>{ currentId=createSession('New chat'); sessions.currentId=currentId; saveSessions(); setHistoryOptions(); convo=[]; saveConvo(); renderAll(); ui.prompt.focus(); });
+
+    // send UX
+    ui.prompt.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
+    ui.send.addEventListener('click', send);
+
+    async function waitForPuter(timeout=12000){
+      if(window.puter?.ai?.chat) return true;
+      const start=Date.now(); return await new Promise(res=>{ const iv=setInterval(()=>{ if(window.puter?.ai?.chat){clearInterval(iv); res(true);} else if(Date.now()-start>timeout){clearInterval(iv); res(false);} },120); });
+    }
+
+    (async function init(){
+      ui.send.disabled=true; ui.status.textContent='Loading Puter.js…';
+      puterReady = await waitForPuter();
+      ui.status.textContent = puterReady ? 'Puter.js ready' : 'Puter.js failed to load';
+      ui.send.disabled = !puterReady;
+      renderAll();
+    })();
+
+    async function send(){
+      const text=ui.prompt.value.trim();
+      if(!text){ toast('Type a message'); return; }
+      if(text.length>4000){ toast('Prompt too long'); return; }
+      if(!puterReady){ toast('Puter.js not ready'); return; }
+
+      appendMsg('user', text);
+      if(convo.length===1){ const s=sessions.list.find(x=>x.id===currentId); if(s){ s.title=text.slice(0,60); saveSessions(); setHistoryOptions(); } }
+      ui.prompt.value='';
+      await runAssistant(text);
+    }
+
+    async function runAssistant(text){
+      const model=ui.model.value, doStream=ui.stream.value==='on';
+      const system=($('#system')?.value||'').trim(), imageUrl=($('#imageUrl')?.value||'').trim();
+      const effective = system ? `[System instruction]: ${system}\n\n${text}` : text;
+
+      const { index:aIndex } = appendMsg('assistant','');
+      const aEl = ui.messages.querySelector(`.msg[data-index="${aIndex}"] .content`);
+      aEl.innerHTML = '<span class="typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>';
+
+      ui.send.disabled=true; ui.prompt.disabled=true; ui.status.textContent=`Calling ${model}…`;
+
+      try{
+        if(doStream){
+          const res = imageUrl ? await puter.ai.chat(effective, imageUrl, { model, stream:true })
+                               : await puter.ai.chat(effective, { model, stream:true });
+          let acc='';
+          if(res && typeof res[Symbol.asyncIterator]==='function'){
+            for await (const part of res){ const chunk=typeof part==='string'?part:(part?.text||''); if(!chunk) continue; acc+=chunk; updateMsg(aIndex, acc); ui.messages.scrollTop=ui.messages.scrollHeight; }
+          }else{
+            const out = typeof res==='string'? res : (res?.text || String(res||'')); updateMsg(aIndex, out);
+          }
+        }else{
+          const out = imageUrl ? await puter.ai.chat(effective, imageUrl, { model }) : await puter.ai.chat(effective, { model });
+          const textOut = typeof out==='string'? out : (out?.text || String(out||'')); updateMsg(aIndex, textOut);
+        }
+      }catch(err){
+        updateMsg(aIndex, `Error: ${err?.message || err}`); toast('Error running model');
+      }finally{
+        ui.send.disabled=false; ui.prompt.disabled=false; ui.status.textContent='Puter.js ready'; ui.prompt.focus();
+      }
+    }
+  </script>
+</body>
+</html>
