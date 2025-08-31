@@ -1,9 +1,5 @@
 <!-- Banner / Title -->
-<p align="center">
-  <a href="#" target="_blank" rel="noopener">
-    <img src="docs/banner.png" alt="Puter Chat Studio" width="960" />
-  </a>
-</p>
+
 
 <h1 align="center">Puter Chat Studio — ChatGPT-style, Zero-Backend</h1>
 
@@ -49,23 +45,3 @@
 > 🛡️ Privacy: All conversations live in your browser (`localStorage`). No server is involved unless you add one.
 
 ---
-
-## 🖼️ Screenshots
-
-| Dark (Desktop) | Light (Mobile) |
-| --- | --- |
-| <img src="docs/screenshot-dark.png" width="600" /> | <img src="docs/screenshot-light-mobile.png" width="240" /> |
-
-> Add your own images in `docs/` or remove this section.
-
----
-
-## 🚀 Quickstart
-
-1. **Clone** this repo.
-2. **Open** `index.html` in a browser  
-   _or_ run a tiny static server:
-   ```bash
-   npx serve .
-   # or
-   python -m http.server 8000
